@@ -67,7 +67,7 @@ detect_mtk() {
     fi
 }
 
-box_header "MTK BROM / Preloader Detect"
+menu_start "MTK BROM / Preloader Detect"
 section "MediaTek download-mode identification (read-only, no commands sent)"
 detect_mtk
 echo

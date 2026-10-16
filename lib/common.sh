@@ -5,10 +5,10 @@
 # This file is meant to be *sourced*, never executed directly:
 #     source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 #
-# It centralizes everything that used to be copy-pasted into every
-# single menu script: colors, box drawing, confirmations, file/tool
-# checks, checksum helpers, logging and the flash/run wrapper that
-# actually reports success or failure correctly.
+# Centralizes colors, adaptive box/menu drawing, confirmations,
+# file/tool checks, checksum caching, a spinner for long-running
+# commands, logging, and the flash/run wrapper that reports success
+# or failure based on the command's real exit code.
 # =====================================================================
 
 # ---------------------------------------------------------------------
@@ -20,6 +20,7 @@ TRRT_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TRRT_LOG_DIR="$TRRT_HOME/logs"
 mkdir -p "$TRRT_LOG_DIR" 2>/dev/null
 TRRT_LOG_FILE="$TRRT_LOG_DIR/trrt-$(date +%Y%m%d).log"
+TRRT_CHECKSUM_CACHE="$TRRT_LOG_DIR/.checksum_cache"
 
 # ---------------------------------------------------------------------
 # Colors
@@ -47,25 +48,72 @@ trrt_log() {
 }
 
 # ---------------------------------------------------------------------
-# UI helpers
+# Terminal width — adaptive layout instead of hand-padded fixed-width
+# boxes (the original scripts hardcoded ~49-column boxes that visibly
+# broke on narrower phone terminals / larger fonts). Prefers the
+# $COLUMNS shell variable (no subprocess) and only forks `tput` when
+# that isn't set. Clamped to a readable range.
 # ---------------------------------------------------------------------
-box_header() {
-    # box_header "Subtitle shown under the tool's name"
-    local subtitle="$1"
-    clear
-    echo -e "${C_CYAN}"
-    echo "╔═══════════════════════════════════════════════╗"
-    printf "║  %b★ %bTermux Root Recovery Tool%b★%b   ║\n" "$C_YELLOW" "$C_WHITE" "$C_YELLOW" "$C_CYAN"
-    echo "╠═══════════════════════════════════════════════╣"
-    printf "║  %b%-45s%b║\n" "$C_MAGENTA" "$subtitle" "$C_CYAN"
-    echo "╚═══════════════════════════════════════════════╝${C_RESET}"
+term_width() {
+    local w="${COLUMNS:-}"
+    if [ -z "$w" ]; then
+        w=$(tput cols 2>/dev/null)
+    fi
+    [ -z "$w" ] && w=50
+    (( w > 72 )) && w=72
+    (( w < 40 )) && w=40
+    echo "$w"
 }
 
+# hr [width] — a horizontal rule. Pure bash (printf + parameter
+# expansion), no `tr`/subshell pipeline, so redrawing a menu doesn't
+# fork extra processes on every frame.
+hr() {
+    local width="${1:-$(term_width)}" line
+    printf -v line '%*s' "$width" ''
+    echo -e "${C_CYAN}${line// /─}${C_RESET}"
+}
+
+# ---------------------------------------------------------------------
+# Menu chrome — replaces the old hand-padded ┌─┐/│ │/└─┘ boxes (every
+# label change meant re-counting spaces to keep the right border
+# aligned, and emoji/variable-width labels broke it anyway). Width is
+# computed once per draw and reused for both rules instead of calling
+# `tput` twice.
+# ---------------------------------------------------------------------
+menu_start() {
+    local subtitle="$1"
+    clear
+    _MENU_WIDTH="$(term_width)"
+    hr "$_MENU_WIDTH"
+    echo -e "  ${C_YELLOW}★ ${C_WHITE}Termux Root Recovery Tool${C_RESET}"
+    [ -n "$subtitle" ] && echo -e "  ${C_MAGENTA}${subtitle}${C_RESET}"
+    hr "$_MENU_WIDTH"
+}
+
+# menu_item "num" "icon" "label" ["color"] — one consistently-indented
+# row; no manual padding required, and multi-digit numbers (1 vs 10)
+# line up automatically via %2s.
+menu_item() {
+    local num="$1" icon="$2" label="$3" color="${4:-$C_GREEN}"
+    printf "  %b%2s.%b %s  %b%s%b\n" "$C_WHITE" "$num" "$C_RESET" "$icon" "$color" "$label" "$C_RESET"
+}
+
+menu_end() {
+    hr "${_MENU_WIDTH:-$(term_width)}"
+}
+
+# Backwards-compatible alias (older drafts of this lib used box_header).
+box_header() { menu_start "$1"; }
+
+# section "Operation title" — lighter sub-header used inside a menu
+# action (e.g. "Recovery Flash Operation"), one rule instead of a
+# full box, so the terminal isn't dominated by chrome during a
+# multi-step flash.
 section() {
     local title="$1"
-    echo -e "${C_CYAN}╭───────────────────────────────────────────────╮${C_RESET}"
-    echo -e "${C_CYAN}│${C_YELLOW} ${title}${C_RESET}"
-    echo -e "${C_CYAN}╰───────────────────────────────────────────────╯${C_RESET}"
+    hr
+    echo -e "${C_YELLOW}▸ ${title}${C_RESET}"
 }
 
 info()  { echo -e "${C_GREEN}► $*${C_RESET}"; }
@@ -87,16 +135,48 @@ confirm() {
 }
 
 # ---------------------------------------------------------------------
+# spinner_wait <pid> <message> — shows a lightweight spinner while a
+# backgrounded command (started by the caller) runs, so operations
+# like a large checksum don't look frozen. No-op (just waits) when
+# stdout isn't a real terminal, so logs/CI output stay clean.
+# ---------------------------------------------------------------------
+spinner_wait() {
+    local pid="$1" msg="$2"
+    if [ -t 1 ]; then
+        local frames='|/-\' i=0
+        while kill -0 "$pid" 2>/dev/null; do
+            i=$(( (i + 1) % 4 ))
+            printf "\r${C_YELLOW}%s %s...${C_RESET}" "${frames:$i:1}" "$msg"
+            sleep 0.12
+        done
+        printf "\r%*s\r" "$(( ${#msg} + 12 ))" ""
+    fi
+    wait "$pid" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------
 # Requirement / safety checks
 # ---------------------------------------------------------------------
+declare -A _TRRT_TOOL_CACHE
+
+# require_tool caches its command -v lookups for the life of the
+# current script/menu session, so repeatedly flashing several images
+# in a row doesn't re-fork `command -v` for the same tool every time.
 require_tool() {
     local tool="$1"
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        err "Required tool '$tool' was not found."
-        warn "Run option 'Fix USB / ADB / Fastboot' from the main menu, or 'bash installadb.sh', then try again."
-        return 1
+    if [ -z "${_TRRT_TOOL_CACHE[$tool]+set}" ]; then
+        if command -v "$tool" >/dev/null 2>&1; then
+            _TRRT_TOOL_CACHE[$tool]=1
+        else
+            _TRRT_TOOL_CACHE[$tool]=0
+        fi
     fi
-    return 0
+    if [ "${_TRRT_TOOL_CACHE[$tool]}" = "1" ]; then
+        return 0
+    fi
+    err "Required tool '$tool' was not found."
+    warn "Run option 'Fix USB / ADB / Fastboot' from the main menu, or 'bash installadb.sh', then try again."
+    return 1
 }
 
 # require_file "/path/to/file" — checks it exists, is a regular file,
@@ -108,9 +188,6 @@ require_file() {
         err "No path entered."
         return 1
     fi
-    # Strip optional surrounding quotes a user may paste/drag in.
-    path="${path%\"}"; path="${path#\"}"
-    path="${path%\'}"; path="${path#\'}"
     if [ ! -f "$path" ]; then
         err "'$path' was not found."
         warn "Double check the path and that the file finished copying/downloading."
@@ -124,7 +201,8 @@ require_file() {
 }
 
 # prompt_path "human label" resultvar — reads a path into $resultvar,
-# trimming quotes so copy/pasted or drag-and-dropped paths both work.
+# trimming surrounding quotes so a copy/pasted or drag-and-dropped
+# path works either way.
 prompt_path() {
     local label="$1" __resultvar="$2" path
     info "Please enter the $label file location."
@@ -134,18 +212,56 @@ prompt_path() {
     printf -v "$__resultvar" '%s' "$path"
 }
 
+# _file_stat_key "/path" — "<size>|<mtime>", used as a cheap content
+# fingerprint for the checksum cache below. Tries GNU stat then BSD
+# stat so this also behaves if ever run outside Termux's toolchain.
+_file_stat_key() {
+    local path="$1" size mtime
+    size=$(stat -c%s "$path" 2>/dev/null || stat -f%z "$path" 2>/dev/null)
+    mtime=$(stat -c%Y "$path" 2>/dev/null || stat -f%m "$path" 2>/dev/null)
+    echo "${size}|${mtime}"
+}
+
 # checksum_offer "/path/to/file" — optional sha256 display so the
 # user can cross-check against the ROM/firmware source before
-# trusting a multi-gigabyte file to a flash command.
+# trusting a multi-gigabyte file to a flash command. Results are
+# cached by path+size+mtime (logs/.checksum_cache) so re-flashing the
+# same unchanged file in the same session doesn't rehash it, and runs
+# with a spinner so a large file doesn't look like a hang.
 checksum_offer() {
     local path="$1"
-    if confirm "Show SHA256 checksum of this file before continuing?"; then
-        if command -v sha256sum >/dev/null 2>&1; then
-            echo -e "${C_CYAN}Computing checksum (this can take a while for large files)...${C_RESET}"
-            sha256sum "$path"
-        else
-            warn "sha256sum is not available on this system; skipping."
-        fi
+    confirm "Show SHA256 checksum of this file before continuing?" || return 0
+    command -v sha256sum >/dev/null 2>&1 || { warn "sha256sum is not available on this system; skipping."; return 0; }
+
+    local fkey sum="" cpath csum
+    fkey="$(_file_stat_key "$path")"
+
+    if [ -f "$TRRT_CHECKSUM_CACHE" ]; then
+        while IFS='|' read -r cpath csize cmtime csum; do
+            if [ "$cpath" = "$path" ] && [ "${csize}|${cmtime}" = "$fkey" ]; then
+                sum="$csum"
+                break
+            fi
+        done < "$TRRT_CHECKSUM_CACHE"
+    fi
+
+    if [ -n "$sum" ]; then
+        info "Using cached checksum (file unchanged since it was last hashed):"
+        echo -e "${C_GREEN}${sum}${C_RESET}  $path"
+        return 0
+    fi
+
+    local tmp; tmp="$(mktemp)"
+    ( sha256sum "$path" > "$tmp" 2>/dev/null ) &
+    spinner_wait "$!" "Computing checksum (large files can take a while)"
+    sum="$(awk '{print $1}' "$tmp" 2>/dev/null)"
+    rm -f "$tmp"
+
+    if [ -n "$sum" ]; then
+        echo -e "${C_GREEN}${sum}${C_RESET}  $path"
+        echo "${path}|${fkey}|${sum}" >> "$TRRT_CHECKSUM_CACHE" 2>/dev/null
+    else
+        warn "Checksum computation failed or was interrupted."
     fi
 }
 
@@ -195,8 +311,6 @@ flash_one() {
     require_tool termux-fastboot || return 1
     prompt_path "$label" path
     require_file "$path" || return 1
-    path="${path%\"}"; path="${path#\"}"
-    path="${path%\'}"; path="${path#\'}"
     checksum_offer "$path"
 
     if ! confirm "Flash '$path' to the '$partition' partition now?"; then

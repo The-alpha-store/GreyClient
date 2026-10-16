@@ -7,22 +7,20 @@ cd "$SCRIPT_DIR" || exit 1
 source "$SCRIPT_DIR/lib/common.sh"
 
 show_menu() {
-    box_header "°GSI ROM Flashing Tool°"
-    section "What would you like to do?"
-    echo -e "${C_BLUE}┌──────────────────────────────────────────────┐${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 1. ${C_GREEN}Check fastboot device                    ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 2. ${C_GREEN}Flash VBMETA                             ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 3. ${C_GREEN}Fastboot to FastbootD                    ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 4. ${C_GREEN}Check userspace for GSI                  ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 5. ${C_RED}Erase system 📵                          ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 6. ${C_RED}Delete logical partition 🅰️               ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 7. ${C_RED}Delete logical partition 🅱️               ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 8. ${C_GREEN}Flash GSI system image                   ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 9. ${C_GREEN}Fastboot to recovery                     ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE}10. ${C_RED}Reset device via cmd ${C_MAGENTA}(not for Xiaomi)    ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE}11. ${C_YELLOW}↩️  Return to main menu                   ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE}12. ${C_RED}🚪 Exit                                  ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}└──────────────────────────────────────────────┘${C_RESET}"
+    menu_start "°GSI ROM Flashing Tool°"
+    menu_item " 1" "🔌" "Check fastboot device"
+    menu_item " 2" "📀" "Flash VBMETA"
+    menu_item " 3" "🔁" "Fastboot to FastbootD"
+    menu_item " 4" "🔎" "Check userspace for GSI"
+    menu_item " 5" "📵" "Erase system" "$C_RED"
+    menu_item " 6" "🅰️" "Delete logical partition A" "$C_RED"
+    menu_item " 7" "🅱️" "Delete logical partition B" "$C_RED"
+    menu_item " 8" "💿" "Flash GSI system image"
+    menu_item " 9" "♻️" "Fastboot to recovery"
+    menu_item "10" "⚠️" "Reset device via cmd (not for Xiaomi)" "$C_RED"
+    menu_item "11" "↩️" "Return to main menu" "$C_YELLOW"
+    menu_item "12" "🚪" "Exit" "$C_RED"
+    menu_end
 }
 
 while true; do

@@ -7,20 +7,18 @@ cd "$SCRIPT_DIR" || exit 1
 source "$SCRIPT_DIR/lib/common.sh"
 
 show_menu() {
-    box_header "USB OTG Fixing Tool"
-    section "What would you like to do?"
-    echo -e "${C_BLUE}┌──────────────────────────────────────────────┐${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 1. ${C_GREEN}🔌 Check OTG device                      ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 2. ${C_GREEN}♻️  Reinstall Termux:API                  ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 3. ${C_GREEN}♻️  Reinstall ADB/Fastboot                ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 4. ${C_GREEN}📵 Stop ADB server                       ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 5. ${C_GREEN}🔁 Start ADB server                      ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 6. ${C_GREEN}🔌 Check ADB devices                     ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 7. ${C_GREEN}🔌 Check fastboot devices                ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 8. ${C_GREEN}⬇️  Install android-tools ${C_MAGENTA}(fastboot ROM)  ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE} 9. ${C_YELLOW}↩️  Return to main menu                   ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}│ ${C_WHITE}10. ${C_RED}🚪 Exit                                  ${C_BLUE}│${C_RESET}"
-    echo -e "${C_BLUE}└──────────────────────────────────────────────┘${C_RESET}"
+    menu_start "USB OTG Fixing Tool"
+    menu_item " 1" "🔌" "Check OTG device"
+    menu_item " 2" "♻️" "Reinstall Termux:API"
+    menu_item " 3" "♻️" "Reinstall ADB/Fastboot"
+    menu_item " 4" "📵" "Stop ADB server"
+    menu_item " 5" "🔁" "Start ADB server"
+    menu_item " 6" "🔌" "Check ADB devices"
+    menu_item " 7" "🔌" "Check fastboot devices"
+    menu_item " 8" "⬇️" "Install android-tools (fastboot ROM)"
+    menu_item " 9" "↩️" "Return to main menu" "$C_YELLOW"
+    menu_item "10" "🚪" "Exit" "$C_RED"
+    menu_end
 }
 
 while true; do

@@ -70,3 +70,29 @@
 ## Deliberately left unchanged
 - `frp.sh`'s actual FRP-reset commands (fastboot/adb calls) — only the
   ownership/authorization confirmation gate at the top was added.
+
+## UI/UX and performance pass
+- Replaced hand-padded fixed-width `┌─┐/│ │/└─┘` boxes (hardcoded to
+  ~49 columns) with an adaptive `menu_start`/`menu_item`/`menu_end`
+  renderer that sizes itself to the actual terminal width (`$COLUMNS`,
+  falling back to `tput cols`), clamped to a readable 40–72 range. Menu
+  labels no longer need manual space-counting to stay aligned, and the
+  layout no longer breaks on narrower phone terminals or larger fonts.
+- Added `spinner_wait` — a lightweight spinner for long-running
+  background commands (currently used by checksum calculation) so a
+  multi-gigabyte file being hashed doesn't look like a hang.
+- Added checksum caching (`logs/.checksum_cache`, keyed by path + size
+  + mtime): re-checking the same unchanged file in the same session
+  reuses the previous SHA256 instead of rehashing it.
+- `require_tool` now caches its `command -v` lookups per script
+  session, so flashing several images in a row no longer re-forks the
+  same lookup each time.
+- `hr`/menu drawing now uses pure bash (`printf` + parameter
+  expansion) instead of a `tr`/pipe, and computes terminal width once
+  per screen draw instead of twice.
+- `start.sh`: added `TRRT_FAST=1` (or simply running non-interactively)
+  to skip the animated splash entirely; trimmed the remaining splash
+  timings (~3s → ~1.5s) and animation frame count.
+- `fixall.sh`: removed a purely cosmetic 1s sleep before launching the
+  main menu; replaced an `echo | grep` pipeline with a direct here-
+  string to shave one forked process per retry loop.

@@ -15,13 +15,18 @@ if [ -f "$TRRT_TOOL_HOME/lib/common.sh" ]; then
     source "$TRRT_TOOL_HOME/lib/common.sh"
 else
     # Minimal fallback so this script still runs stand-alone.
-    C_RED="\033[1;31m"; C_GREEN="\033[1;92m"; C_YELLOW="\033[1;33m"; C_RESET="\033[0m"
+    C_RED="\033[1;31m"; C_GREEN="\033[1;92m"; C_YELLOW="\033[1;33m"; C_CYAN="\033[1;36m"; C_WHITE="\033[1;97m"; C_RESET="\033[0m"
     err()  { echo -e "${C_RED}✗ $*${C_RESET}"; }
     ok()   { echo -e "${C_GREEN}✓ $*${C_RESET}"; }
     warn() { echo -e "${C_YELLOW}⚠ $*${C_RESET}"; }
+    info() { echo -e "${C_GREEN}► $*${C_RESET}"; }
     confirm() { read -r -p "$1 [y/N]: " a; [[ "$a" =~ ^[Yy] ]]; }
-    box_header() { clear; echo -e "${C_YELLOW}=== Termux Root Recovery Tool ===${C_RESET}"; echo "$1"; }
-    section() { echo -e "${C_YELLOW}-- $1 --${C_RESET}"; }
+    term_width() { local w="${COLUMNS:-$(tput cols 2>/dev/null)}"; [ -z "$w" ] && w=50; (( w>72 )) && w=72; (( w<40 )) && w=40; echo "$w"; }
+    hr() { local w="${1:-$(term_width)}" l; printf -v l '%*s' "$w" ''; echo -e "${C_CYAN}${l// /─}${C_RESET}"; }
+    menu_start() { clear; local w; w=$(term_width); hr "$w"; echo -e "  ${C_YELLOW}★ ${C_WHITE}Termux Root Recovery Tool${C_RESET}"; [ -n "$1" ] && echo -e "  ${C_YELLOW}$1${C_RESET}"; hr "$w"; }
+    menu_item() { printf "  %b%2s.%b %s  %b%s%b\n" "$C_WHITE" "$1" "$C_RESET" "$2" "${4:-$C_GREEN}" "$3" "$C_RESET"; }
+    menu_end() { hr; }
+    section() { hr; echo -e "${C_YELLOW}▸ $1${C_RESET}"; }
     goodbye() { ok "Thank you for using Termux Root Recovery Tool!"; exit 0; }
     go_home() { [ -x "$TRRT_TOOL_HOME/flash.sh" ] && exec "$TRRT_TOOL_HOME/flash.sh"; goodbye; }
 fi
@@ -46,15 +51,13 @@ chmod +x "$file1" "$file2" "$file3"
 ok "Vendor flash scripts found and made executable."
 
 show_menu() {
-    box_header "Fastboot ROM Flashing Tool"
-    section "What would you like to do?"
-    echo -e "${C_BLUE:-}┌──────────────────────────────────────────────┐${C_RESET}"
-    echo -e "│ 1. Flash without locking bootloader             │"
-    echo -e "│ 2. Flash and lock 🔒 bootloader                 │"
-    echo -e "│ 3. Flash except data/storage                    │"
-    echo -e "│ 4. Return to main menu                          │"
-    echo -e "│ 5. Exit                                         │"
-    echo -e "└──────────────────────────────────────────────┘"
+    menu_start "Fastboot ROM Flashing Tool"
+    menu_item "1" "💿" "Flash without locking bootloader"
+    menu_item "2" "🔒" "Flash and lock bootloader" "$C_RED"
+    menu_item "3" "💾" "Flash except data/storage"
+    menu_item "4" "↩️" "Return to main menu" "$C_YELLOW"
+    menu_item "5" "🚪" "Exit" "$C_RED"
+    menu_end
 }
 
 while true; do

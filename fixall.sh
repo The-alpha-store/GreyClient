@@ -25,7 +25,7 @@ check_termux_adb() {
     fi
 }
 
-box_header "Device Requirement Check"
+menu_start "Device Requirement Check"
 section "Checking USB, ADB and Fastboot availability"
 
 attempt=0
@@ -36,13 +36,13 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
     echo -e "${C_CYAN}[$attempt/$MAX_ATTEMPTS] Checking USB via Termux:API...${C_RESET}"
 
     USB_OUTPUT="$(termux-usb -l 2>/dev/null)"
-    USB_ID="$(echo "$USB_OUTPUT" | grep -oE '/dev/bus/usb/[0-9]+/[0-9]+')"
+    USB_ID="$(grep -oE '/dev/bus/usb/[0-9]+/[0-9]+' <<< "$USB_OUTPUT")"
 
     if [ -z "$USB_ID" ]; then
         err "No USB device detected."
         check_termux_api
         warn "Plug in the device (or enable OTG) and make sure you grant the USB permission prompt."
-        sleep 2
+        sleep 1.5
         if ! confirm "Try again?"; then
             break
         fi
@@ -70,7 +70,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
 
     err "USB detected but no ADB/Fastboot device responded."
     warn "Check USB debugging is enabled, the cable supports data, and you accepted any on-device prompt."
-    sleep 2
+    sleep 1.5
     if ! confirm "Try again?"; then
         break
     fi
@@ -78,7 +78,6 @@ done
 
 if [ "$device_ready" -eq 1 ]; then
     ok "Device connected successfully! Launching Termux Root Recovery Tool..."
-    sleep 1
     exec "$SCRIPT_DIR/flash.sh"
 else
     warn "Could not confirm a connected device after $attempt attempt(s)."
